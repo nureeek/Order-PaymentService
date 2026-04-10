@@ -9,7 +9,15 @@
 - Payment Service (REST :8081, gRPC :9091)
 - Order Service calls Payment Service via gRPC
 - Order Service exposes server-side streaming for order status updates
+## Architecture Diagram
+![Architecture](img.png)
 
+
+### Communication Flow
+- Client → Order Service: REST HTTP (:8080)
+- Order Service → Payment Service: gRPC (:9091)
+- stream-client → Order Service: gRPC Server-side Streaming (:9090)
+- Protos repo → Generated repo: GitHub Actions auto-generation
 ## How to run
 
 ### Payment Service
