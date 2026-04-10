@@ -1,29 +1,26 @@
 package usecase
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	"orderService/internal/domain"
 	"orderService/internal/repository"
 
 	"github.com/google/uuid"
+	pb "github.com/nureeek/Generated-order-payment-grpc/payment"
 )
 
 type OrderUseCase struct {
-	repo       repository.OrderRepository
-	httpClient *http.Client
-	paymentURL string
+	repo          repository.OrderRepository
+	paymentClient pb.PaymentServiceClient
 }
 
-func NewOrderUseCase(repo repository.OrderRepository, client *http.Client, paymentURL string) *OrderUseCase {
+func NewOrderUseCase(repo repository.OrderRepository, paymentClient pb.PaymentServiceClient) *OrderUseCase {
 	return &OrderUseCase{
-		repo:       repo,
-		httpClient: client,
-		paymentURL: paymentURL,
+		repo:          repo,
+		paymentClient: paymentClient,
 	}
 }
 
@@ -51,31 +48,18 @@ func (uc *OrderUseCase) CreateOrder(customerID, itemName string, amount int64, i
 	if err := uc.repo.Create(order, idempotencyKey); err != nil {
 		return nil, err
 	}
-
-	payload, _ := json.Marshal(map[string]interface{}{
-		"order_id": order.ID,
-		"amount":   order.Amount,
+	paymentResp, err := uc.paymentClient.ProcessPayment(context.Background(), &pb.PaymentRequest{
+		OrderId:  order.ID,
+		Amount:   float64(order.Amount),
+		Currency: "KZT",
 	})
-
-	req, _ := http.NewRequest(http.MethodPost, uc.paymentURL+"/payments", bytes.NewBuffer(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := uc.httpClient.Do(req)
 	if err != nil {
 		uc.repo.UpdateStatus(order.ID, "Failed")
 		order.Status = "Failed"
 		return order, errors.New("payment service unavailable")
 	}
-	defer resp.Body.Close()
 
-	var paymentResp map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&paymentResp); err != nil {
-		uc.repo.UpdateStatus(order.ID, "Failed")
-		order.Status = "Failed"
-		return order, err
-	}
-
-	if status, ok := paymentResp["status"].(string); ok && status == "Authorized" {
+	if paymentResp.Status == "Authorized" {
 		uc.repo.UpdateStatus(order.ID, "Paid")
 		order.Status = "Paid"
 	} else {
