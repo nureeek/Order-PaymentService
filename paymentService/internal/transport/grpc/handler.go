@@ -31,3 +31,21 @@ func (h *PaymentGRPCHandler) ProcessPayment(ctx context.Context, req *pb.Payment
 		CreatedAt: timestamppb.Now(),
 	}, nil
 }
+func (h *PaymentGRPCHandler) ListPayments(ctx context.Context, req *pb.ListPaymentsRequest) (*pb.ListPaymentsResponse, error) {
+	payments, err := h.uc.ListPayments(req.MinAmount, req.MaxAmount)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid range: %v", err)
+	}
+
+	var result []*pb.PaymentResponse
+	for _, p := range payments {
+		result = append(result, &pb.PaymentResponse{
+			PaymentId: p.ID,
+			Status:    p.Status,
+			CreatedAt: timestamppb.Now(),
+			Amount:    p.Amount,
+		})
+	}
+
+	return &pb.ListPaymentsResponse{Payments: result}, nil
+}

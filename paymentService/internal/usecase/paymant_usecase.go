@@ -42,3 +42,10 @@ func (uc *PaymentUseCase) ProcessPayment(orderID string, amount int64) (*domain.
 func (uc *PaymentUseCase) GetPaymentByOrderID(orderID string) (*domain.Payment, error) {
 	return uc.repo.GetByOrderID(orderID)
 }
+
+func (uc *PaymentUseCase) ListPayments(min, max int64) ([]*domain.Payment, error) {
+	if min > 0 && max > 0 && min > max {
+		return nil, errors.New("min_amount cannot be greater than max_amount")
+	}
+	return uc.repo.FindByAmountRange(min, max)
+}

@@ -15,7 +15,7 @@ message OrderRequest {
 }
 
 message OrderStatusUpdate {
-  string order_id = 1;
-  string status = 2;
-  google.protobuf.Timestamp updated_at = 3;
+  string order_id=1;
+  string status=2;
+  google.protobuf.Timestamp updated_at=3;
 }
