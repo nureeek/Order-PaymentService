@@ -1,0 +1,47 @@
+name: Generate Go code from Proto
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Protos repo
+        uses: actions/checkout@v3
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Go plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Generate Go code
+        run: |
+          mkdir -p generated/payment generated/order
+          protoc --go_out=generated --go_opt=paths=source_relative \
+                 --go-grpc_out=generated --go-grpc_opt=paths=source_relative \
+                 payment/payment.proto
+          protoc --go_out=generated --go_opt=paths=source_relative \
+                 --go-grpc_out=generated --go-grpc_opt=paths=source_relative \
+                 order/order.proto
+
+      - name: Push to Generated repo
+        run: |
+          git clone https://x-access-token:${{ secrets.GEN_TOKEN }}@github.com/nureeek/Generated-order-payment-grpc.git gen-repo
+          cp -r generated/payment gen-repo/
+          cp -r generated/order gen-repo/
+          cd gen-repo
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          git add .
+          git diff --staged --quiet || git commit -m "Auto-generate Go code from protos"
+          git push
