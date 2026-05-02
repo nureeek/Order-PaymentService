@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"paymentService/internal/app"
+	infrastructure "paymentService/internal/inftastructure"
 	"paymentService/internal/repository"
 	grpcHandler "paymentService/internal/transport/grpc"
 	httpHandler "paymentService/internal/transport/http"
@@ -34,9 +35,18 @@ func main() {
 		log.Fatal("cannot connect to payment_db:", err)
 	}
 
-	repo := repository.NewPaymentRepository(db)
-	uc := usecase.NewPaymentUseCase(repo)
+	amqpURL := os.Getenv("AMQP_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
+	}
 
+	pub, err := infrastructure.NewPublisher(amqpURL)
+	if err != nil {
+		log.Printf("Warning: could not connect to RabbitMQ: %v", err)
+	}
+
+	repo := repository.NewPaymentRepository(db)
+	uc := usecase.NewPaymentUseCase(repo, pub)
 	grpcPort := os.Getenv("GRPC_PORT")
 	if grpcPort == "" {
 		grpcPort = "9091"

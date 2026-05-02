@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 
 	"paymentService/internal/domain"
@@ -10,13 +11,25 @@ import (
 )
 
 type PaymentUseCase struct {
-	repo repository.PaymentRepository
+	repo      repository.PaymentRepository
+	publisher Publisher
 }
 
-func NewPaymentUseCase(repo repository.PaymentRepository) *PaymentUseCase {
-	return &PaymentUseCase{repo: repo}
+type Publisher interface {
+	Publish(ctx context.Context, event PaymentEvent) error
 }
 
+type PaymentEvent struct {
+	PaymentID     string
+	OrderID       string
+	Amount        float64
+	CustomerEmail string
+	Status        string
+}
+
+func NewPaymentUseCase(repo repository.PaymentRepository, publisher Publisher) *PaymentUseCase {
+	return &PaymentUseCase{repo: repo, publisher: publisher}
+}
 func (uc *PaymentUseCase) ProcessPayment(orderID string, amount int64) (*domain.Payment, error) {
 
 	if amount > 100000 {
@@ -35,8 +48,17 @@ func (uc *PaymentUseCase) ProcessPayment(orderID string, amount int64) (*domain.
 	if err != nil {
 		return nil, err
 	}
-
+	if uc.publisher != nil {
+		uc.publisher.Publish(context.Background(), PaymentEvent{
+			PaymentID:     payment.ID,
+			OrderID:       payment.OrderID,
+			Amount:        float64(payment.Amount),
+			CustomerEmail: "user@example.com",
+			Status:        payment.Status,
+		})
+	}
 	return payment, nil
+
 }
 
 func (uc *PaymentUseCase) GetPaymentByOrderID(orderID string) (*domain.Payment, error) {
