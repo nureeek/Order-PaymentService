@@ -6,15 +6,8 @@ import (
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"paymentService/internal/usecase"
 )
-
-type PaymentEvent struct {
-	PaymentID     string  `json:"payment_id"`
-	OrderID       string  `json:"order_id"`
-	Amount        float64 `json:"amount"`
-	CustomerEmail string  `json:"customer_email"`
-	Status        string  `json:"status"`
-}
 
 type Publisher struct {
 	conn    *amqp.Connection
@@ -47,7 +40,7 @@ func NewPublisher(amqpURL string) (*Publisher, error) {
 	return &Publisher{conn: conn, channel: ch}, nil
 }
 
-func (p *Publisher) Publish(ctx context.Context, event PaymentEvent) error {
+func (p *Publisher) Publish(ctx context.Context, event usecase.PaymentEvent) error {
 	body, err := json.Marshal(event)
 	if err != nil {
 		return err
