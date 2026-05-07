@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"orderService/internal/domain"
@@ -12,15 +13,22 @@ import (
 	pb "github.com/nureeek/Generated-order-payment-grpc/payment"
 )
 
+type Cache interface {
+	Get(ctx context.Context, orderID string) (*domain.Order, error)
+	Set(ctx context.Context, order *domain.Order) error
+	Delete(ctx context.Context, orderID string) error
+}
 type OrderUseCase struct {
 	repo          repository.OrderRepository
 	paymentClient pb.PaymentServiceClient
+	cache         Cache
 }
 
-func NewOrderUseCase(repo repository.OrderRepository, paymentClient pb.PaymentServiceClient) *OrderUseCase {
+func NewOrderUseCase(repo repository.OrderRepository, paymentClient pb.PaymentServiceClient, cache Cache) *OrderUseCase {
 	return &OrderUseCase{
 		repo:          repo,
 		paymentClient: paymentClient,
+		cache:         cache,
 	}
 }
 
@@ -61,6 +69,9 @@ func (uc *OrderUseCase) CreateOrder(customerID, itemName string, amount int64, i
 
 	if paymentResp.Status == "Authorized" {
 		uc.repo.UpdateStatus(order.ID, "Paid")
+		if uc.cache != nil {
+			uc.cache.Delete(context.Background(), order.ID)
+		}
 		order.Status = "Paid"
 	} else {
 		uc.repo.UpdateStatus(order.ID, "Failed")
@@ -71,7 +82,20 @@ func (uc *OrderUseCase) CreateOrder(customerID, itemName string, amount int64, i
 }
 
 func (uc *OrderUseCase) GetOrder(id string) (*domain.Order, error) {
-	return uc.repo.GetByID(id)
+	if uc.cache != nil {
+		if order, err := uc.cache.Get(context.Background(), id); err == nil {
+			return order, nil
+		}
+		log.Println("Cache MISS for order:", id)
+	}
+	order, err := uc.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if uc.cache != nil {
+		uc.cache.Set(context.Background(), order)
+	}
+	return order, nil
 }
 
 func (uc *OrderUseCase) CancelOrder(id string) error {
@@ -79,12 +103,16 @@ func (uc *OrderUseCase) CancelOrder(id string) error {
 	if err != nil {
 		return err
 	}
-
 	if order.Status != "Pending" {
 		return errors.New("only pending orders can be cancelled")
 	}
-
-	return uc.repo.UpdateStatus(id, "Cancelled")
+	if err := uc.repo.UpdateStatus(id, "Cancelled"); err != nil {
+		return err
+	}
+	if uc.cache != nil {
+		uc.cache.Delete(context.Background(), id)
+	}
+	return nil
 }
 
 func (uc *OrderUseCase) GetRevenue(customerID string) (*repository.CustomerRevenue, error) {

@@ -3,19 +3,21 @@ package main
 import (
 	"log"
 	"net"
+	"orderService/internal/infrastructure"
 	"os"
 
 	"database/sql"
-	_ "github.com/lib/pq"
-	orderpb "github.com/nureeek/Generated-order-payment-grpc/order"
-	pb "github.com/nureeek/Generated-order-payment-grpc/payment"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"orderService/internal/app"
 	"orderService/internal/repository"
 	ordergrpc "orderService/internal/transport/grpc"
 	httpHandler "orderService/internal/transport/http"
 	"orderService/internal/usecase"
+
+	_ "github.com/lib/pq"
+	orderpb "github.com/nureeek/Generated-order-payment-grpc/order"
+	pb "github.com/nureeek/Generated-order-payment-grpc/payment"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -47,11 +49,17 @@ func main() {
 
 	paymentClient := pb.NewPaymentServiceClient(conn)
 
-	repo := repository.NewOrderRepository(db)
-	uc := usecase.NewOrderUseCase(repo, paymentClient)
-	handler := httpHandler.NewHandler(uc)
-	router := app.NewRouter(handler)
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
+	}
 
+	cache := infrastructure.NewOrderCache(redisURL)
+	repo := repository.NewOrderRepository(db)
+	uc := usecase.NewOrderUseCase(repo, paymentClient, cache)
+	handler := httpHandler.NewHandler(uc)
+	router := app.NewRouter(handler, cache.Client())
+	
 	orderGrpcPort := os.Getenv("ORDER_GRPC_PORT")
 	if orderGrpcPort == "" {
 		orderGrpcPort = "9090"

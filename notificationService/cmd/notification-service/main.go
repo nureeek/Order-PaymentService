@@ -16,9 +16,14 @@ func main() {
 		amqpURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	c, err := consumer.NewConsumer(amqpURL)
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
+	}
+
+	c, err := consumer.NewConsumer(amqpURL, redisURL)
 	if err != nil {
-		log.Fatal("Failed to connect to RabbitMQ:", err)
+		log.Fatal("Failed to connect:", err)
 	}
 	defer c.Close()
 
